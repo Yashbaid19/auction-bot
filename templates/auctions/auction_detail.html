@@ -1,0 +1,319 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ auction.title }} - Smart Auction Bot{% endblock %}
+
+{% block extra_css %}
+<style>
+    .bid-history {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .phase-indicator {
+        height: 30px;
+        border-radius: 15px;
+    }
+    .bot-bid {
+        background-color: #e3f2fd;
+    }
+    .human-bid {
+        background-color: #f1f8e9;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Auction Info -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">{{ auction.title }}</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">{{ auction.description }}</p>
+                
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h5 class="text-muted mb-2">Current Price</h5>
+                                <h2 class="text-success mb-0" id="current-price">₹{{ auction.current_price }}</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h5 class="text-muted mb-2">Time Remaining</h5>
+                                <h2 class="text-primary mb-0" id="time-remaining">{{ auction.remaining_time|floatformat:0 }}s</h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase Indicator -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Phase {{ auction.current_phase }}</span>
+                        <span id="phase-progress">{{ auction.phase_progress|floatformat:0 }}%</span>
+                    </div>
+                    <div class="progress phase-indicator">
+                        <div class="progress-bar bg-info" role="progressbar" 
+                             style="width: {{ auction.phase_progress|floatformat:0 }}%" 
+                             id="phase-bar"></div>
+                    </div>
+                </div>
+
+                <!-- Bidding Form -->
+                {% if auction.status == 'active' and user.is_authenticated %}
+                    <div class="card border-primary mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0"><i class="fas fa-hand-holding-usd me-2"></i>Place Your Bid</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="bid-form">
+                                {% csrf_token %}
+                                <div class="mb-3">
+                                    <label class="form-label">Bid Amount</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">₹</span>
+                                        <input type="number" class="form-control" id="bid-amount" 
+                                               min="{{ auction.current_price|add:100 }}" 
+                                               step="100" required>
+                                    </div>
+                                    <small class="text-muted">Minimum: ₹{{ auction.current_price|add:100 }}</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Increment</label>
+                                    <select class="form-select" id="bid-increment">
+                                        <option value="100">₹100</option>
+                                        <option value="500" selected>₹500</option>
+                                        <option value="1000">₹1000</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-lg w-100">
+                                    <i class="fas fa-gavel me-2"></i>Place Bid
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {% elif auction.status == 'active' %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Please <a href="{% url 'users:login' %}">login</a> to place bids.
+                    </div>
+                {% else %}
+                    <div class="alert alert-secondary">
+                        <i class="fas fa-info-circle me-2"></i>This auction has ended.
+                        {% if auction.winner %}
+                            <strong>Winner: {{ auction.winner.username }}</strong>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Bid History -->
+        <div class="card shadow">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-history me-2"></i>Bid History</h5>
+            </div>
+            <div class="card-body bid-history" id="bid-history">
+                {% for bid in bids %}
+                    <div class="d-flex justify-content-between align-items-center p-2 mb-2 rounded {% if bid.bidder_type == 'bot' %}bot-bid{% else %}human-bid{% endif %}">
+                        <div>
+                            <strong>
+                                {% if bid.bidder_type == 'bot' %}
+                                    <i class="fas fa-robot me-1"></i>Bot
+                                {% else %}
+                                    <i class="fas fa-user me-1"></i>{{ bid.bidder.username }}
+                                {% endif %}
+                            </strong>
+                            <small class="text-muted ms-2">Phase {{ bid.phase }}</small>
+                        </div>
+                        <div>
+                            <strong class="text-success">₹{{ bid.amount }}</strong>
+                            <small class="text-muted ms-2">{{ bid.timestamp|timesince }} ago</small>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="text-muted text-center">No bids yet</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Auction Stats -->
+        <div class="card shadow mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Status:</span>
+                        <span class="badge bg-{% if auction.status == 'active' %}success{% elif auction.status == 'completed' %}secondary{% else %}warning{% endif %}">
+                            {{ auction.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Total Bids:</span>
+                        <strong id="total-bids">{{ auction.bids.count }}</strong>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Human Bids:</span>
+                        <strong id="human-bids">{{ auction.bids.filter.bidder_type='human'|length }}</strong>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Bot Bids:</span>
+                        <strong id="bot-bids">{{ auction.bids.filter.bidder_type='bot'|length }}</strong>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Start Price:</span>
+                        <strong>₹{{ auction.start_price }}</strong>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Max Bid:</span>
+                        <strong>₹{{ auction.max_bid }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="card shadow">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-list me-2"></i>Activity Log</h5>
+            </div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                {% for log in logs %}
+                    <div class="mb-2">
+                        <small class="text-muted">{{ log.timestamp|timesince }} ago</small>
+                        <p class="mb-0 small">{{ log.message }}</p>
+                    </div>
+                {% empty %}
+                    <p class="text-muted small">No activity yet</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const auctionId = '{{ auction.id }}';
+    
+    // Polling function to update auction data
+    async function updateAuctionData() {
+        try {
+            const response = await fetch(`/api/auctions/${auctionId}/status_info/`);
+            const data = await response.json();
+            
+            if (data.status !== 'active') {
+                location.reload();
+                return;
+            }
+            
+            // Update price and time
+            document.getElementById('current-price').textContent = '₹' + data.current_price;
+            document.getElementById('time-remaining').textContent = Math.floor(data.remaining_time) + 's';
+            document.getElementById('phase-progress').textContent = Math.floor(data.phase_progress * 100) + '%';
+            document.getElementById('phase-bar').style.width = (data.phase_progress * 100) + '%';
+            
+            // Update bid counts
+            document.getElementById('total-bids').textContent = data.total_bids;
+            document.getElementById('human-bids').textContent = data.human_bids;
+            document.getElementById('bot-bids').textContent = data.bot_bids;
+            
+        } catch (error) {
+            console.error('Error updating auction:', error);
+        }
+    }
+    
+    // Update bids list
+    async function updateBids() {
+        try {
+            const response = await fetch(`/api/auctions/${auctionId}/bids/`);
+            const bids = await response.json();
+            
+            const history = document.getElementById('bid-history');
+            history.innerHTML = '';
+            
+            bids.slice(0, 20).forEach(bid => {
+                const bidDiv = document.createElement('div');
+                bidDiv.className = `d-flex justify-content-between align-items-center p-2 mb-2 rounded ${bid.bidder_type === 'bot' ? 'bot-bid' : 'human-bid'}`;
+                const timeAgo = new Date(bid.timestamp).toLocaleTimeString();
+                bidDiv.innerHTML = `
+                    <div>
+                        <strong>
+                            ${bid.bidder_type === 'bot' ? '<i class="fas fa-robot me-1"></i>Bot' : '<i class="fas fa-user me-1"></i>' + (bid.bidder_username || 'User')}
+                        </strong>
+                        <small class="text-muted ms-2">Phase ${bid.phase}</small>
+                    </div>
+                    <div>
+                        <strong class="text-success">₹${bid.amount}</strong>
+                        <small class="text-muted ms-2">${timeAgo}</small>
+                    </div>
+                `;
+                history.appendChild(bidDiv);
+            });
+        } catch (error) {
+            console.error('Error updating bids:', error);
+        }
+    }
+    
+    // Bid form submission
+    document.getElementById('bid-form')?.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const amount = parseFloat(document.getElementById('bid-amount').value);
+        const increment = parseInt(document.getElementById('bid-increment').value);
+        
+        try {
+            const response = await fetch(`/api/auctions/${auctionId}/bid/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({ amount, increment })
+            });
+            
+            if (response.ok) {
+                document.getElementById('bid-amount').value = '';
+                alert('Bid placed successfully!');
+                // Refresh data
+                updateAuctionData();
+                updateBids();
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.detail || JSON.stringify(error)));
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    });
+    
+    // Poll for updates every 2 seconds
+    if ('{{ auction.status }}' === 'active') {
+        updateAuctionData();
+        updateBids();
+        setInterval(updateAuctionData, 2000);
+        setInterval(updateBids, 3000);
+    }
+</script>
+{% endblock %}
+

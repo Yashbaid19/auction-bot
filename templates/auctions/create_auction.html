@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Create Auction - Smart Auction Bot{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Create New Auction</h3>
+            </div>
+            <div class="card-body">
+                {% if not user.is_authenticated %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Please <a href="{% url 'users:login' %}">login</a> to create an auction.
+                    </div>
+                {% else %}
+                    <form id="create-auction-form">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label">Title *</label>
+                            <input type="text" class="form-control" id="title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="description" rows="4"></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Start Price (₹) *</label>
+                                <input type="number" class="form-control" id="start_price" min="100" step="100" value="1000" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Max Bid (₹) *</label>
+                                <input type="number" class="form-control" id="max_bid" min="1000" step="1000" value="10000" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Duration (seconds) *</label>
+                                <input type="number" class="form-control" id="duration" min="30" step="10" value="90" required>
+                                <small class="text-muted">Recommended: 90 seconds</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Bot Active</label>
+                                <div class="form-check form-switch mt-2">
+                                    <input class="form-check-input" type="checkbox" id="bot_active" checked>
+                                    <label class="form-check-label" for="bot_active">
+                                        Enable intelligent bot bidding
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Bot Strategy:</strong> The bot will bid strategically across 3 phases:
+                            <ul class="mb-0 mt-2">
+                                <li><strong>Phase 1 (0-25%):</strong> Observes and reacts to human bids</li>
+                                <li><strong>Phase 2 (25-75%):</strong> Mid-game engagement</li>
+                                <li><strong>Phase 3 (75-100%+):</strong> Aggressive bidding until max bid</li>
+                            </ul>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-rocket me-2"></i>Create Auction
+                            </button>
+                            <a href="{% url 'auctions:home' %}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('create-auction-form')?.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            title: document.getElementById('title').value,
+            description: document.getElementById('description').value,
+            start_price: parseFloat(document.getElementById('start_price').value),
+            max_bid: parseFloat(document.getElementById('max_bid').value),
+            duration: parseInt(document.getElementById('duration').value),
+            bot_active: document.getElementById('bot_active').checked
+        };
+        
+        // Validate
+        if (formData.max_bid <= formData.start_price) {
+            alert('Max bid must be greater than start price!');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/auctions/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify(formData)
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                window.location.href = `/${data.id}/`;
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.detail || JSON.stringify(error)));
+            }
+        } catch (error) {
+            alert('Error creating auction: ' + error.message);
+        }
+    });
+</script>
+{% endblock %}
+

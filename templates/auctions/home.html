@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Home - Smart Auction Bot{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-4 mb-3">
+            <i class="fas fa-gavel text-primary me-2"></i>Live Auctions
+        </h1>
+        <p class="lead text-muted">Participate in real-time auctions with our intelligent bidding bot</p>
+    </div>
+</div>
+
+<!-- Active Auctions -->
+<div class="row mb-5">
+    <div class="col-12">
+        <h2 class="h3 mb-3">
+            <i class="fas fa-fire text-danger me-2"></i>Active Auctions
+        </h2>
+        {% if active_auctions %}
+            <div class="row">
+                {% for auction in active_auctions %}
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card h-100 shadow-sm auction-card">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ auction.title }}</h5>
+                                <p class="card-text text-muted small">{{ auction.description|truncatewords:15 }}</p>
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Current Price:</span>
+                                        <strong class="text-success">₹{{ auction.current_price }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Max Bid:</span>
+                                        <span>₹{{ auction.max_bid }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Phase:</span>
+                                        <span class="badge bg-info">Phase {{ auction.current_phase }}</span>
+                                    </div>
+                                </div>
+                                <div class="progress mb-3" style="height: 8px;">
+                                    <div class="progress-bar bg-primary" role="progressbar" 
+                                         style="width: {{ auction.phase_progress|floatformat:0 }}%"></div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock me-1"></i>
+                                        <span id="timer-{{ auction.id }}">{{ auction.remaining_time|floatformat:0 }}s</span>
+                                    </small>
+                                    <small class="text-muted">
+                                        <i class="fas fa-users me-1"></i>{{ auction.total_bids }} bids
+                                    </small>
+                                </div>
+                                <a href="{% url 'auctions:auction-detail' auction.id %}" class="btn btn-primary w-100">
+                                    <i class="fas fa-eye me-1"></i>View & Bid
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>No active auctions at the moment. Create one to get started!
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Recent Completed Auctions -->
+{% if recent_auctions %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="h3 mb-3">
+            <i class="fas fa-history me-2"></i>Recent Completed Auctions
+        </h2>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Final Price</th>
+                        <th>Winner</th>
+                        <th>Completed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for auction in recent_auctions %}
+                        <tr>
+                            <td>{{ auction.title }}</td>
+                            <td><strong class="text-success">₹{{ auction.current_price }}</strong></td>
+                            <td>
+                                {% if auction.winner %}
+                                    <i class="fas fa-trophy text-warning me-1"></i>{{ auction.winner.username }}
+                                {% else %}
+                                    <span class="text-muted">No winner</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ auction.end_time|timesince }} ago</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if user.is_authenticated %}
+<div class="row mt-4">
+    <div class="col-12 text-center">
+        <a href="{% url 'auctions:create-auction' %}" class="btn btn-lg btn-primary">
+            <i class="fas fa-plus-circle me-2"></i>Create New Auction
+        </a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Update timers for active auctions
+    setInterval(function() {
+        {% for auction in active_auctions %}
+            fetch('/api/auctions/{{ auction.id }}/status_info/')
+                .then(response => response.json())
+                .then(data => {
+                    const timerEl = document.getElementById('timer-{{ auction.id }}');
+                    if (timerEl && data.remaining_time > 0) {
+                        timerEl.textContent = Math.floor(data.remaining_time) + 's';
+                    }
+                });
+        {% endfor %}
+    }, 1000);
+</script>
+{% endblock %}
+
