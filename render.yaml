@@ -3,7 +3,7 @@ services:
     name: auction-bot
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    buildCommand: pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --noinput
     startCommand: gunicorn auction_bot.wsgi:application
     envVars:
       - key: PYTHON_VERSION
@@ -13,7 +13,9 @@ services:
       - key: DEBUG
         value: "False"
       - key: ALLOWED_HOSTS
-        value: "auction-bot.onrender.com"
+        value: "auction-bot-hhi8.onrender.com"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://auction-bot-hhi8.onrender.com,https://*.onrender.com"
       - key: DATABASE_URL
         fromDatabase:
           name: auction-bot-db
