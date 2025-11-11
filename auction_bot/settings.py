@@ -20,7 +20,7 @@ CSRF_TRUSTED_ORIGINS = config(
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
 
-# Ensure Django knows the original protocol when behind a proxy (Railway, Render, etc.)
+# Ensure Django knows the original protocol when behind a proxy (Railway, etc.)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
@@ -79,7 +79,7 @@ WSGI_APPLICATION = 'auction_bot.wsgi.application'
 
 
 # Database
-# Use PostgreSQL if DATABASE_URL is set (Render), otherwise SQLite (local)
+# Use PostgreSQL if DATABASE_URL is set (Railway), otherwise SQLite (local)
 try:
     import dj_database_url
     DATABASES = {

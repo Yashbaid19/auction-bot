@@ -49,21 +49,19 @@ Before you begin, ensure you have:
 
 - **Web Browser** (Chrome, Firefox, Edge, etc.)
 
-### 🚀 For Render Deployment
+### 🚀 For Railway Deployment
 
 **Good news!** You don't need:
-- ❌ API keys or external service credentials
-- ❌ Manual database configuration (automatic with Blueprint)
-- ❌ Your PC running after deployment (app runs 24/7 on Render)
+- ❌ Complex configuration files
+- ❌ Manual setup after deployment
+- ❌ Your PC running after deployment (app runs 24/7 on Railway)
 
 **You only need:**
 - ✅ GitHub account (to host your code)
-- ✅ Render account (free tier available)
-- ✅ That's it! Render handles everything automatically
+- ✅ Railway account (free tier available with $5 credit)
+- ✅ That's it! Railway handles everything automatically
 
-**See `RENDER_DEPLOYMENT.md` for complete deployment guide.**
-
-**Note**: No Redis, Celery, or Docker needed! This is a simplified Django-only version.
+**Note**: No Redis, Celery, or Docker needed! This is a simplified Django-only version with `railway.json` configuration.
 
 ---
 
@@ -191,7 +189,7 @@ auction_bot/
 │   └── js/
 │
 ├── requirements.txt          # Python dependencies
-├── render.yaml               # Render deployment config
+├── railway.json              # Railway deployment config
 ├── manage.py                 # Django management script
 └── README.md                 # This file
 ```
@@ -251,27 +249,31 @@ auction_bot/
 
 ## 🚀 Deployment
 
-### Deploy to Render (Recommended)
+### Deploy to Railway (Recommended)
 
 **Step 1**: Upload to GitHub
-- Follow the detailed guide in `GITHUB_SETUP.md`
 - Push your code to GitHub
+- Make sure `railway.json` is included in the repository
 
-**Step 2**: Deploy on Render
-- Follow the detailed guide in `RENDER_DEPLOYMENT.md`
-- Render will automatically deploy from GitHub
-- Your app will be live on the internet!
+**Step 2**: Deploy on Railway
+- Sign up at [railway.app](https://railway.app)
+- Create a new project from your GitHub repository
+- Railway will automatically detect `railway.json` and configure everything
+- Add a PostgreSQL database from Railway's services
+- Set environment variables:
+  - `SECRET_KEY` - Django secret key
+  - `DEBUG` - Set to `False`
+  - `ALLOWED_HOSTS` - Your Railway domain
+  - `DATABASE_URL` - Automatically provided by Railway's PostgreSQL
+- Deploy!
 
 **Quick Summary**:
 1. Push code to GitHub
-2. Sign up on Render.com
-3. Connect GitHub repository
-4. Render auto-detects `render.yaml` and sets everything up
-5. Your app is live!
-
-For detailed step-by-step instructions, see:
-- `GITHUB_SETUP.md` - How to upload to GitHub
-- `RENDER_DEPLOYMENT.md` - How to deploy on Render
+2. Sign up on Railway.app
+3. Create new project from GitHub repository
+4. Add PostgreSQL database
+5. Railway uses `railway.json` for automatic deployment
+6. Your app is live!
 
 ---
 
@@ -322,11 +324,10 @@ The bot operates in three distinct phases:
   - Screenshot descriptions
   - Troubleshooting tips
 
-- **`RENDER_DEPLOYMENT.md`** - Complete guide to deploy on Render
-  - Detailed deployment steps
-  - Environment variable setup
-  - Database configuration
-  - Troubleshooting common issues
+- **`railway.json`** - Railway deployment configuration
+  - Build and start commands
+  - Health check settings
+  - Automatic deployment configuration
 
 - **`HOW_TO_RUN.md`** - Local development guide
   - Setting up locally
@@ -350,7 +351,7 @@ The bot operates in three distinct phases:
 - **Frontend**: Bootstrap 5, JavaScript
 - **Server**: Gunicorn (production)
 - **Static Files**: WhiteNoise
-- **Deployment**: Render.com
+- **Deployment**: Railway.app
 
 ---
 
@@ -384,7 +385,7 @@ This project is licensed under the MIT License - see the `LICENSE` file for deta
 
 - Django and Django REST Framework
 - Bootstrap for the beautiful UI
-- Render for hosting platform
+- Railway for hosting platform
 
 ---
 
@@ -401,4 +402,4 @@ If you encounter any issues:
 
 **Built with ❤️ using Django**
 
-**Ready to deploy?** Follow `GITHUB_SETUP.md` then `RENDER_DEPLOYMENT.md`! 🚀
+**Ready to deploy?** Push to GitHub and deploy on Railway! 🚀
