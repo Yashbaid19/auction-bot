@@ -23,6 +23,9 @@
 {% endblock %}
 
 {% block content %}
+<!-- Hidden CSRF token for AJAX requests -->
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
 <div class="row">
     <div class="col-lg-8">
         <!-- Auction Info -->
@@ -55,12 +58,11 @@
                 <!-- Phase Indicator -->
                 <div class="mb-4">
                     <div class="d-flex justify-content-between mb-2">
-                        <span>Phase {{ auction.current_phase }}</span>
+                        <span>Phase <span id="current-phase">{{ auction.current_phase }}</span></span>
                         <span id="phase-progress">{{ auction.phase_progress|floatformat:0 }}%</span>
                     </div>
                     <div class="progress phase-indicator">
                         <div class="progress-bar bg-info" role="progressbar" 
-                             style="width: {{ auction.phase_progress|floatformat:0 }}%" 
                              id="phase-bar"></div>
                     </div>
                 </div>
@@ -82,15 +84,17 @@
                                                min="{{ auction.current_price|add:100 }}" 
                                                step="100" required>
                                     </div>
-                                    <small class="text-muted">Minimum: ₹{{ auction.current_price|add:100 }}</small>
+                                    <small class="text-muted">Minimum: ₹{{ auction.current_price|add:100 }} (You can bid any amount above this)</small>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Increment</label>
+                                    <label class="form-label">Increment (Optional)</label>
                                     <select class="form-select" id="bid-increment">
+                                        <option value="">Auto (any amount)</option>
                                         <option value="100">₹100</option>
-                                        <option value="500" selected>₹500</option>
+                                        <option value="500">₹500</option>
                                         <option value="1000">₹1000</option>
                                     </select>
+                                    <small class="text-muted">Leave as "Auto" to bid any amount above minimum</small>
                                 </div>
                                 <button type="submit" class="btn btn-primary btn-lg w-100">
                                     <i class="fas fa-gavel me-2"></i>Place Bid
@@ -103,12 +107,27 @@
                         <i class="fas fa-exclamation-triangle me-2"></i>
                         Please <a href="{% url 'users:login' %}">login</a> to place bids.
                     </div>
-                {% else %}
+                {% elif auction.status == 'pending' %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-clock me-2"></i>This auction is pending and hasn't started yet.
+                        {% if auction.created_by == user %}
+                            <div class="mt-2">
+                                <button class="btn btn-success" onclick="startAuction('{{ auction.id }}')">
+                                    <i class="fas fa-play me-2"></i>Start Auction
+                                </button>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% elif auction.status == 'completed' %}
                     <div class="alert alert-secondary">
-                        <i class="fas fa-info-circle me-2"></i>This auction has ended.
+                        <i class="fas fa-flag-checkered me-2"></i>This auction has ended.
                         {% if auction.winner %}
                             <strong>Winner: {{ auction.winner.username }}</strong>
                         {% endif %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-secondary">
+                        <i class="fas fa-info-circle me-2"></i>This auction is {{ auction.get_status_display|lower }}.
                     </div>
                 {% endif %}
             </div>
@@ -168,13 +187,13 @@
                 <div class="mb-3">
                     <div class="d-flex justify-content-between">
                         <span>Human Bids:</span>
-                        <strong id="human-bids">{{ auction.bids.filter.bidder_type='human'|length }}</strong>
+                        <strong id="human-bids">{{ human_bids_count }}</strong>
                     </div>
                 </div>
                 <div class="mb-3">
                     <div class="d-flex justify-content-between">
                         <span>Bot Bids:</span>
-                        <strong id="bot-bids">{{ auction.bids.filter.bidder_type='bot'|length }}</strong>
+                        <strong id="bot-bids">{{ bot_bids_count }}</strong>
                     </div>
                 </div>
                 <div class="mb-3">
@@ -230,6 +249,11 @@
             // Update price and time
             document.getElementById('current-price').textContent = '₹' + data.current_price;
             document.getElementById('time-remaining').textContent = Math.floor(data.remaining_time) + 's';
+            
+            // Update phase information
+            if (data.current_phase) {
+                document.getElementById('current-phase').textContent = data.current_phase;
+            }
             document.getElementById('phase-progress').textContent = Math.floor(data.phase_progress * 100) + '%';
             document.getElementById('phase-bar').style.width = (data.phase_progress * 100) + '%';
             
@@ -280,7 +304,14 @@
         e.preventDefault();
         
         const amount = parseFloat(document.getElementById('bid-amount').value);
-        const increment = parseInt(document.getElementById('bid-increment').value);
+        const incrementValue = document.getElementById('bid-increment').value;
+        const increment = incrementValue ? parseInt(incrementValue) : null;
+        
+        // Prepare request body
+        const requestBody = { amount };
+        if (increment) {
+            requestBody.increment = increment;
+        }
         
         try {
             const response = await fetch(`/api/auctions/${auctionId}/bid/`, {
@@ -289,7 +320,7 @@
                     'Content-Type': 'application/json',
                     'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                 },
-                body: JSON.stringify({ amount, increment })
+                body: JSON.stringify(requestBody)
             });
             
             if (response.ok) {
@@ -306,6 +337,40 @@
             alert('Error: ' + error.message);
         }
     });
+    
+    // Start auction function
+    async function startAuction(auctionId) {
+        try {
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+            if (!csrfToken) {
+                alert('Error: CSRF token not found. Please refresh the page and try again.');
+                return;
+            }
+            
+            const response = await fetch(`/api/auctions/${auctionId}/start/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken.value
+                }
+            });
+            
+            if (response.ok) {
+                alert('Auction started successfully!');
+                location.reload(); // Refresh the page to show updated status
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.error || error.detail || JSON.stringify(error)));
+            }
+        } catch (error) {
+            console.error('Start auction error:', error);
+            alert('Error: ' + error.message);
+        }
+    }
+    
+    // Initialize progress bar
+    const initialProgress = {{ auction.phase_progress|floatformat:2 }};
+    document.getElementById('phase-bar').style.width = (initialProgress * 100) + '%';
     
     // Poll for updates every 2 seconds
     if ('{{ auction.status }}' === 'active') {

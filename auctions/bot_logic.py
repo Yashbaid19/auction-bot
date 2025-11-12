@@ -27,8 +27,13 @@ class AuctionBot:
         if self.auction.status != 'active':
             return False
         
-        # Check if bot has reached max bid
+        # Check if bot has reached max bid or if next bid would exceed it
         if self.auction.bot_current_bid >= self.auction.max_bid:
+            return False
+        
+        # Check if next bid would exceed max bid
+        next_bid = self.get_next_bid_amount()
+        if next_bid > self.auction.max_bid:
             return False
         
         # Check if auction has time remaining or can be extended
@@ -41,7 +46,6 @@ class AuctionBot:
         """Calculate the next bid amount."""
         current = float(self.auction.current_price)
         max_bid = float(self.auction.max_bid)
-        bot_current = float(self.auction.bot_current_bid)
         
         # Choose a random increment
         increment = random.choice(self.bid_increments)
@@ -51,32 +55,31 @@ class AuctionBot:
         if next_bid > max_bid:
             next_bid = max_bid
         
-        # Ensure we don't exceed bot's current bid limit
-        if next_bid > bot_current + max(self.bid_increments):
-            next_bid = min(next_bid, bot_current + max(self.bid_increments))
+        # Ensure the bid is at least minimum increment above current price
+        min_bid = current + min(self.bid_increments)
+        if next_bid < min_bid:
+            next_bid = min_bid
         
         return next_bid
     
     def should_bid_in_phase_1(self, elapsed_time, phase_duration):
         """Determine if bot should bid in Phase 1."""
-        wait_percentage = self.config['WAIT_PERCENTAGE']
-        wait_time = phase_duration * wait_percentage
+        logger.info(f"Phase 1 check: elapsed={elapsed_time:.1f}s, duration={phase_duration:.1f}s")
         
-        # Wait 75% of Phase 1
-        if elapsed_time < wait_time:
-            return False
-        
-        # Check if human has bid recently (within last 5 seconds)
+        # Check if human has bid recently (within last 10 seconds)
         recent_human_bid = self.auction.bids.filter(
             bidder_type='human',
-            timestamp__gte=timezone.now() - timezone.timedelta(seconds=5)
+            timestamp__gte=timezone.now() - timezone.timedelta(seconds=10)
         ).exists()
         
         if recent_human_bid:
-            # React to human bid with delay
+            logger.info("Human bid detected in Phase 1, bot will react")
             return True
         
-        # If no human bid, bid once in last 25% of phase
+        # Bid after 50% of Phase 1 (more aggressive than default 75%)
+        wait_percentage = 0.5
+        wait_time = phase_duration * wait_percentage
+        
         if elapsed_time >= wait_time:
             # Check if bot has already bid in this phase
             phase_bids = self.auction.bids.filter(
@@ -85,30 +88,31 @@ class AuctionBot:
             ).exists()
             
             if not phase_bids:
+                logger.info(f"Bot will bid in Phase 1 after waiting {wait_time:.1f}s")
                 return True
         
         return False
     
     def should_bid_in_phase_2(self, elapsed_time, phase_start, phase_duration):
         """Determine if bot should bid in Phase 2."""
-        wait_percentage = self.config['WAIT_PERCENTAGE']
         phase_elapsed = elapsed_time - phase_start
-        wait_time = phase_duration * wait_percentage
+        logger.info(f"Phase 2 check: phase_elapsed={phase_elapsed:.1f}s, duration={phase_duration:.1f}s")
         
-        # Wait 75% of Phase 2
-        if phase_elapsed < wait_time:
-            return False
-        
-        # Check if human has bid recently
+        # Check if human has bid recently (within last 10 seconds - same as Phase 1)
         recent_human_bid = self.auction.bids.filter(
             bidder_type='human',
-            timestamp__gte=timezone.now() - timezone.timedelta(seconds=5)
+            timestamp__gte=timezone.now() - timezone.timedelta(seconds=10)
         ).exists()
         
         if recent_human_bid:
+            logger.info("Human bid detected in Phase 2, bot will react")
             return True
         
-        # If no human bid, bid once in last 25% of phase
+        # More aggressive: Wait only 60% of Phase 2 (instead of 75%)
+        wait_percentage = 0.6
+        wait_time = phase_duration * wait_percentage
+        
+        # If no human bid, bid once after 60% of phase
         if phase_elapsed >= wait_time:
             phase_bids = self.auction.bids.filter(
                 bidder_type='bot',
@@ -116,14 +120,31 @@ class AuctionBot:
             ).exists()
             
             if not phase_bids:
+                logger.info(f"Bot will bid in Phase 2 after waiting {wait_time:.1f}s")
                 return True
         
         return False
     
     def should_bid_in_phase_3(self):
-        """Determine if bot should bid in Phase 3 (30% chance per second)."""
-        probability = self.config['PHASE_3_BID_PROBABILITY']
-        return random.random() < probability
+        """Determine if bot should bid in Phase 3."""
+        # Check if human has bid recently (within last 10 seconds)
+        recent_human_bid = self.auction.bids.filter(
+            bidder_type='human',
+            timestamp__gte=timezone.now() - timezone.timedelta(seconds=10)
+        ).exists()
+        
+        if recent_human_bid:
+            logger.info("Human bid detected in Phase 3, bot will react")
+            return True
+        
+        # If no recent human bids, use probability (but higher chance)
+        probability = min(0.60, self.config['PHASE_3_BID_PROBABILITY'] * 2)  # 60% chance
+        should_bid = random.random() < probability
+        
+        if should_bid:
+            logger.info("Bot decided to bid in Phase 3 (random)")
+        
+        return should_bid
     
     def get_reaction_delay(self):
         """Get random reaction delay for bot."""
@@ -133,7 +154,10 @@ class AuctionBot:
     
     def place_bid(self, phase=None):
         """Place a bid on behalf of the bot."""
+        logger.info(f"Bot attempting to place bid for auction {self.auction.id}")
+        
         if not self.can_bid():
+            logger.info("Bot cannot bid - conditions not met")
             return False
         
         with transaction.atomic():
@@ -163,8 +187,9 @@ class AuctionBot:
                 phase=phase
             )
             
-            # Update auction
-            self.auction.current_price = next_bid
+            # Update auction - only update current_price if this bid is higher
+            if next_bid > self.auction.current_price:
+                self.auction.current_price = next_bid
             self.auction.bot_current_bid = next_bid
             
             # Extend time in Phase 3 if needed
@@ -233,17 +258,23 @@ class AuctionBot:
         if self.auction.status != 'active':
             return
         
-        # Check if bot reached max bid
-        if self.auction.bot_current_bid >= self.auction.max_bid:
+        # Check if max bid reached (by anyone)
+        if self.auction.current_price >= self.auction.max_bid:
             self.complete_auction()
             return
         
-        # Check if time expired (only if not in Phase 3 or can't extend)
+        # Check if time expired
         if self.auction.remaining_time <= 0:
-            if self.auction.current_phase != 3:
+            # In Phase 3, allow some extension time for final bids, but eventually complete
+            if self.auction.current_phase == 3:
+                # Check if we've extended too much (more than 30 seconds past original end)
+                if self.auction.extended_time > 30:
+                    self.complete_auction()
+                    return
+            else:
+                # Complete immediately if not in Phase 3
                 self.complete_auction()
-            elif self.auction.bot_current_bid >= self.auction.max_bid:
-                self.complete_auction()
+                return
     
     def complete_auction(self):
         """Complete the auction and determine winner."""

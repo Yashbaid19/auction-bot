@@ -12,7 +12,8 @@
     </div>
 </div>
 
-<div class="row">
+<!-- Auction Statistics -->
+<div class="row mb-4">
     <div class="col-md-3 mb-4">
         <div class="card text-center shadow">
             <div class="card-body">
@@ -34,18 +35,49 @@
     <div class="col-md-3 mb-4">
         <div class="card text-center shadow">
             <div class="card-body">
-                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
-                <h3>{{ stats.completed_auctions }}</h3>
-                <p class="text-muted mb-0">Completed</p>
+                <i class="fas fa-clock fa-3x text-warning mb-3"></i>
+                <h3>{{ stats.pending_auctions }}</h3>
+                <p class="text-muted mb-0">Pending Auctions</p>
             </div>
         </div>
     </div>
     <div class="col-md-3 mb-4">
         <div class="card text-center shadow">
             <div class="card-body">
-                <i class="fas fa-hand-holding-usd fa-3x text-warning mb-3"></i>
+                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                <h3>{{ stats.completed_auctions }}</h3>
+                <p class="text-muted mb-0">Completed</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bidding Statistics -->
+<div class="row mb-4">
+    <div class="col-md-4 mb-4">
+        <div class="card text-center shadow">
+            <div class="card-body">
+                <i class="fas fa-hand-holding-usd fa-3x text-info mb-3"></i>
                 <h3>{{ stats.total_bids }}</h3>
                 <p class="text-muted mb-0">Total Bids</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card text-center shadow">
+            <div class="card-body">
+                <i class="fas fa-user fa-3x text-primary mb-3"></i>
+                <h3>{{ stats.human_bids }}</h3>
+                <p class="text-muted mb-0">Human Bids</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card text-center shadow">
+            <div class="card-body">
+                <i class="fas fa-robot fa-3x text-secondary mb-3"></i>
+                <h3>{{ stats.bot_bids }}</h3>
+                <p class="text-muted mb-0">Bot Bids</p>
             </div>
         </div>
     </div>
@@ -59,8 +91,9 @@
             </div>
             <div class="card-body">
                 <p class="mb-2"><strong>Bot Strategy:</strong> Phase-based intelligent bidding</p>
-                <p class="mb-2"><strong>Bid Increments:</strong> ₹100, ₹500, ₹1000</p>
-                <p class="mb-0"><strong>Real-time Updates:</strong> WebSocket enabled</p>
+                <p class="mb-2"><strong>Bid Increments:</strong> ₹100, ₹500, ₹1000 (flexible amounts allowed)</p>
+                <p class="mb-2"><strong>Real-time Updates:</strong> AJAX polling every 2 seconds</p>
+                <p class="mb-0"><strong>Phase System:</strong> 3 phases with different bot behaviors</p>
             </div>
         </div>
     </div>

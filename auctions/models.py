@@ -60,6 +60,8 @@ class Auction(models.Model):
     @property
     def remaining_time(self):
         """Calculate remaining time in seconds."""
+        if self.status == 'pending':
+            return self.duration  # Show full duration for pending auctions
         if not self.start_time or not self.end_time:
             return 0
         now = timezone.now()

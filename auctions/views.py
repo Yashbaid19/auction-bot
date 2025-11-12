@@ -24,9 +24,11 @@ logger = logging.getLogger('auctions')
 def home(request):
     """Home page with active auctions."""
     active_auctions = Auction.objects.filter(status='active').order_by('-start_time')
+    pending_auctions = Auction.objects.filter(status='pending').order_by('-created_at')
     recent_auctions = Auction.objects.filter(status='completed').order_by('-end_time')[:5]
     return render(request, 'auctions/home.html', {
         'active_auctions': active_auctions,
+        'pending_auctions': pending_auctions,
         'recent_auctions': recent_auctions
     })
 
@@ -35,10 +37,17 @@ def auction_detail(request, auction_id):
     auction = get_object_or_404(Auction, id=auction_id)
     bids = auction.bids.all().order_by('-timestamp')[:20]
     logs = auction.logs.all().order_by('-timestamp')[:10]
+    
+    # Calculate bid counts
+    human_bids_count = auction.bids.filter(bidder_type='human').count()
+    bot_bids_count = auction.bids.filter(bidder_type='bot').count()
+    
     return render(request, 'auctions/auction_detail.html', {
         'auction': auction,
         'bids': bids,
-        'logs': logs
+        'logs': logs,
+        'human_bids_count': human_bids_count,
+        'bot_bids_count': bot_bids_count,
     })
 
 def create_auction(request):
@@ -67,8 +76,12 @@ def statistics_view(request):
     stats = {
         'total_auctions': Auction.objects.count(),
         'active_auctions': Auction.objects.filter(status='active').count(),
+        'pending_auctions': Auction.objects.filter(status='pending').count(),
         'completed_auctions': Auction.objects.filter(status='completed').count(),
+        'cancelled_auctions': Auction.objects.filter(status='cancelled').count(),
         'total_bids': Bid.objects.count(),
+        'human_bids': Bid.objects.filter(bidder_type='human').count(),
+        'bot_bids': Bid.objects.filter(bidder_type='bot').count(),
     }
     return render(request, 'auctions/statistics.html', {'stats': stats})
 
@@ -141,6 +154,31 @@ class AuctionViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(auction)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['get'])
+    def bot_status(self, request, pk=None):
+        """Check if bot is running for this auction."""
+        auction = self.get_object()
+        
+        from .bot_runner import _running_bots
+        import threading
+        
+        auction_id_str = str(auction.id)
+        is_running = auction_id_str in _running_bots
+        thread_alive = False
+        
+        if is_running:
+            thread = _running_bots[auction_id_str]
+            thread_alive = thread.is_alive()
+        
+        return Response({
+            'auction_id': auction_id_str,
+            'bot_active': auction.bot_active,
+            'bot_thread_exists': is_running,
+            'bot_thread_alive': thread_alive,
+            'active_threads': len(_running_bots),
+            'all_threads': [t.name for t in threading.enumerate() if 'AuctionBot' in t.name]
+        })
     
     @action(detail=True, methods=['post'])
     def stop(self, request, pk=None):

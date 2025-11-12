@@ -114,6 +114,12 @@ class BidCreateSerializer(serializers.Serializer):
                 f"Increment must be one of: {valid_increments}"
             )
         
+        # Validate against maximum bid
+        if amount > auction.max_bid:
+            raise serializers.ValidationError(
+                f"Bid cannot exceed maximum bid of ₹{auction.max_bid}."
+            )
+        
         # Calculate minimum bid
         min_bid = auction.current_price + min(valid_increments)
         if amount < min_bid:
@@ -121,12 +127,14 @@ class BidCreateSerializer(serializers.Serializer):
                 f"Bid must be at least ₹{min_bid}. Current price is ₹{auction.current_price}."
             )
         
-        # Check if increment matches
+        # Check if increment matches (only if increment is provided)
         if increment:
             difference = amount - auction.current_price
-            if difference not in valid_increments:
+            # Allow any amount as long as it's at least the minimum increment above current price
+            min_increment = min(valid_increments)
+            if difference < min_increment:
                 raise serializers.ValidationError(
-                    f"Bid increment must be one of: {valid_increments}"
+                    f"Bid must be at least ₹{min_increment} above current price"
                 )
         
         return attrs
@@ -137,8 +145,9 @@ class AuctionCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Auction
-        fields = ['title', 'description', 'start_price', 'max_bid', 
+        fields = ['id', 'title', 'description', 'start_price', 'max_bid', 
                   'duration', 'bot_active']
+        read_only_fields = ['id']
     
     def validate_max_bid(self, value):
         if value <= 0:

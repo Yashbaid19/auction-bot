@@ -108,7 +108,13 @@
             
             if (response.ok) {
                 const data = await response.json();
-                window.location.href = `/${data.id}/`;
+                console.log('Auction created:', data);
+                if (data.id) {
+                    window.location.href = `/${data.id}/`;
+                } else {
+                    alert('Error: No auction ID returned from server');
+                    console.error('Response data:', data);
+                }
             } else {
                 const error = await response.json();
                 alert('Error: ' + (error.detail || JSON.stringify(error)));

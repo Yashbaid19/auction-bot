@@ -18,15 +18,23 @@ def start_auction_bot(auction_id):
     """Start bot for an auction using threading."""
     auction_id_str = str(auction_id)
     
-    # Stop existing bot if running
+    # Check if bot is already running and alive
     if auction_id_str in _running_bots:
-        stop_auction_bot(auction_id_str)
+        existing_thread = _running_bots[auction_id_str]
+        if existing_thread.is_alive():
+            logger.info(f"Bot thread already running for auction {auction_id_str}")
+            return  # Don't restart if already running
+        else:
+            # Clean up dead thread
+            logger.info(f"Cleaning up dead bot thread for auction {auction_id_str}")
+            stop_auction_bot(auction_id_str)
     
-    # Start new bot thread
+    # Start new bot thread (non-daemon for better persistence)
     thread = threading.Thread(
         target=_run_bot,
         args=(auction_id_str,),
-        daemon=True
+        daemon=False,  # Changed to False for better persistence
+        name=f"AuctionBot-{auction_id_str[:8]}"
     )
     thread.start()
     _running_bots[auction_id_str] = thread
@@ -44,14 +52,19 @@ def stop_auction_bot(auction_id):
 
 def _run_bot(auction_id_str):
     """Main bot loop running in thread."""
+    logger.info(f"Bot thread starting for auction {auction_id_str}")
+    
     while auction_id_str in _running_bots:
         try:
             auction = Auction.objects.get(id=auction_id_str)
+            logger.info(f"Bot processing auction {auction_id_str}: status={auction.status}, bot_active={auction.bot_active}")
             
             if auction.status != 'active':
+                logger.info(f"Auction {auction_id_str} not active, stopping bot")
                 break
             
             if not auction.bot_active:
+                logger.info(f"Bot not active for auction {auction_id_str}, stopping")
                 break
             
             bot = AuctionBot(auction)
@@ -77,10 +90,16 @@ def _run_bot(auction_id_str):
             
             # Process based on phase
             if phase == 1:
+                logger.info(f"Processing Phase 1 for auction {auction_id_str}")
                 result = bot.process_phase_1(elapsed_time, phase_1_end)
                 if result == 'react':
                     # Schedule delayed reaction
-                    time.sleep(bot.get_reaction_delay())
+                    delay = bot.get_reaction_delay()
+                    logger.info(f"Bot reacting with {delay:.1f}s delay")
+                    time.sleep(delay)
+                    bot.place_bid(phase=1)
+                elif result:
+                    logger.info("Bot placing immediate bid in Phase 1")
                     bot.place_bid(phase=1)
             elif phase == 2:
                 phase_2_duration = phase_2_end - phase_1_end
