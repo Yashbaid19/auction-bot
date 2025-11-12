@@ -24,9 +24,13 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/auth/', include('users.urls')),
-    path('', include('auctions.urls')),  # Frontend routes at root level
-    path('api/auctions/', include('auctions.api_urls')),  # API routes only
+    # Frontend routes for users (login, register pages)
+    path('auth/', include('users.urls')),
+    # Frontend routes for auctions at root level
+    path('', include('auctions.urls')),
+    # API routes
+    path('api/auth/', include('users.api_urls')),  # API auth endpoints
+    path('api/auctions/', include('auctions.api_urls')),
     
     # API Documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
