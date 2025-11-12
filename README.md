@@ -315,34 +315,6 @@ The bot operates in three distinct phases:
 
 ---
 
-## 📚 Documentation
-
-### Detailed Guides
-
-- **`GITHUB_SETUP.md`** - Complete guide to upload your code to GitHub
-  - Step-by-step instructions
-  - Screenshot descriptions
-  - Troubleshooting tips
-
-- **`railway.json`** - Railway deployment configuration
-  - Build and start commands
-  - Health check settings
-  - Automatic deployment configuration
-
-- **`HOW_TO_RUN.md`** - Local development guide
-  - Setting up locally
-  - Running the server
-  - Testing the application
-  - Common issues and solutions
-
-- **`API_DOCUMENTATION.md`** - Complete API reference
-  - All endpoints documented
-  - Request/response examples
-  - Authentication guide
-  - Error handling
-
----
-
 ## 🔧 Tech Stack
 
 - **Backend Framework**: Django 4.2.7
