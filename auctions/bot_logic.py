@@ -288,15 +288,26 @@ class AuctionBot:
             if not self.auction.end_time or timezone.now() < self.auction.end_time:
                 self.auction.end_time = timezone.now()
             
-            # Determine winner (last human bidder)
-            last_human_bid = self.auction.bids.filter(bidder_type='human').first()
-            if last_human_bid:
-                self.auction.winner = last_human_bid.bidder
+            # Determine winner (last bidder overall)
+            last_bid = self.auction.bids.first()  # Already ordered by -timestamp
+            if last_bid:
+                if last_bid.bidder_type == 'human':
+                    self.auction.winner = last_bid.bidder
+                else:
+                    # Bot won, set winner to None to indicate bot victory
+                    self.auction.winner = None
             
             self.auction.save()
             
             # Create log
-            winner_name = self.auction.winner.username if self.auction.winner else "No winner"
+            if last_bid:
+                if last_bid.bidder_type == 'human':
+                    winner_name = self.auction.winner.username
+                else:
+                    winner_name = "Bot"
+            else:
+                winner_name = "No winner"
+                
             AuctionLog.objects.create(
                 auction=self.auction,
                 event_type='completed',

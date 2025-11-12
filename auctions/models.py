@@ -105,6 +105,17 @@ class Auction(models.Model):
             return (elapsed - phase_1_end) / (phase_2_end - phase_1_end)
         else:
             return min(1.0, (elapsed - phase_2_end) / (total_duration - phase_2_end))
+    
+    def get_winner_display(self):
+        """Get the display name for the winner."""
+        if self.winner:
+            return self.winner.username
+        elif self.status == 'completed' and self.bids.exists():
+            # Check if bot won
+            last_bid = self.bids.first()
+            if last_bid and last_bid.bidder_type == 'bot':
+                return "Bot"
+        return "No winner"
 
 
 class Bid(models.Model):

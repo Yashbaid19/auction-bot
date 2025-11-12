@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.utils import timezone
 from django.db.models import Q, Count, Sum, Avg
+from django.db import models
 from django.shortcuts import get_object_or_404, render
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
@@ -25,11 +26,9 @@ def home(request):
     """Home page with active auctions."""
     active_auctions = Auction.objects.filter(status='active').order_by('-start_time')
     pending_auctions = Auction.objects.filter(status='pending').order_by('-created_at')
-    recent_auctions = Auction.objects.filter(status='completed').order_by('-end_time')[:5]
     return render(request, 'auctions/home.html', {
         'active_auctions': active_auctions,
         'pending_auctions': pending_auctions,
-        'recent_auctions': recent_auctions
     })
 
 def auction_detail(request, auction_id):
@@ -79,11 +78,77 @@ def statistics_view(request):
         'pending_auctions': Auction.objects.filter(status='pending').count(),
         'completed_auctions': Auction.objects.filter(status='completed').count(),
         'cancelled_auctions': Auction.objects.filter(status='cancelled').count(),
-        'total_bids': Bid.objects.count(),
-        'human_bids': Bid.objects.filter(bidder_type='human').count(),
-        'bot_bids': Bid.objects.filter(bidder_type='bot').count(),
     }
     return render(request, 'auctions/statistics.html', {'stats': stats})
+
+
+def completed_auctions_view(request):
+    """View list of completed auctions with basic info."""
+    completed_auctions = Auction.objects.filter(
+        status='completed'
+    ).select_related('created_by', 'winner').order_by('-end_time')
+    
+    # Add basic stats for each auction
+    for auction in completed_auctions:
+        auction.total_bids = auction.bids.count()
+        auction.human_bids_count = auction.bids.filter(bidder_type='human').count()
+        auction.bot_bids_count = auction.bids.filter(bidder_type='bot').count()
+        
+        # Calculate auction duration
+        if auction.start_time and auction.end_time:
+            auction.actual_duration = (auction.end_time - auction.start_time).total_seconds()
+        else:
+            auction.actual_duration = 0
+    
+    return render(request, 'auctions/completed_auctions.html', {
+        'completed_auctions': completed_auctions
+    })
+
+
+def completed_auction_detail_view(request, auction_id):
+    """View detailed history for a specific completed auction."""
+    auction = get_object_or_404(Auction, id=auction_id, status='completed')
+    
+    # Get comprehensive auction data
+    auction.total_bids = auction.bids.count()
+    auction.human_bids_count = auction.bids.filter(bidder_type='human').count()
+    auction.bot_bids_count = auction.bids.filter(bidder_type='bot').count()
+    auction.bid_history = auction.bids.select_related('bidder').order_by('timestamp')
+    
+    # Calculate auction duration
+    if auction.start_time and auction.end_time:
+        auction.actual_duration = (auction.end_time - auction.start_time).total_seconds()
+    else:
+        auction.actual_duration = 0
+    
+    # Calculate price increase percentage
+    if auction.start_price > 0:
+        price_increase = auction.current_price - auction.start_price
+        auction.price_increase_amount = price_increase
+        auction.price_increase_percentage = (price_increase / auction.start_price) * 100
+    else:
+        auction.price_increase_amount = 0
+        auction.price_increase_percentage = 0
+    
+    # Get phase breakdown
+    phase_stats = {
+        1: auction.bids.filter(phase=1).count(),
+        2: auction.bids.filter(phase=2).count(),
+        3: auction.bids.filter(phase=3).count(),
+    }
+    
+    # Get bidder participation
+    unique_bidders = auction.bids.values('bidder__username', 'bidder_type').annotate(
+        bid_count=models.Count('id'),
+        total_amount=models.Sum('amount'),
+        max_bid=models.Max('amount')
+    ).order_by('-max_bid')
+    
+    return render(request, 'auctions/completed_auction_detail.html', {
+        'auction': auction,
+        'phase_stats': phase_stats,
+        'unique_bidders': unique_bidders,
+    })
 
 class AuctionViewSet(viewsets.ModelViewSet):
     """ViewSet for Auction CRUD operations."""
@@ -179,6 +244,33 @@ class AuctionViewSet(viewsets.ModelViewSet):
             'active_threads': len(_running_bots),
             'all_threads': [t.name for t in threading.enumerate() if 'AuctionBot' in t.name]
         })
+    
+    @action(detail=True, methods=['delete'])
+    def delete_pending(self, request, pk=None):
+        """Delete a pending auction."""
+        auction = self.get_object()
+        
+        if auction.status != 'pending':
+            return Response(
+                {'error': 'Only pending auctions can be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if auction.created_by != request.user:
+            return Response(
+                {'error': 'Only the creator can delete the auction.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        auction_title = auction.title
+        auction.delete()
+        
+        logger.info(f"Pending auction deleted: {auction_title} by {request.user.username}")
+        
+        return Response(
+            {'message': f'Auction "{auction_title}" has been deleted successfully.'},
+            status=status.HTTP_200_OK
+        )
     
     @action(detail=True, methods=['post'])
     def stop(self, request, pk=None):
